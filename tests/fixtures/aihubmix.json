@@ -1,0 +1,51 @@
+{
+  "data": [
+    {
+      "model_id": "coding-glm-5.3-free",
+      "model_name": "Coding GLM 5.3 (free)",
+      "types": "llm",
+      "features": "thinking,tools,function_calling,structured_outputs",
+      "tool_call": true,
+      "context_length": 1048576
+    },
+    {
+      "model_id": "kimi-for-coding-free",
+      "model_name": "Kimi for Coding (free)",
+      "types": "llm",
+      "features": "thinking,tools,function_calling",
+      "tool_call": true,
+      "context_length": 256000
+    },
+    {
+      "model_id": "gpt-5.5-free",
+      "model_name": "GPT-5.5 (free)",
+      "types": "llm",
+      "features": "thinking,function_calling,tools",
+      "tool_call": true,
+      "context_length": 1050000
+    },
+    {
+      "model_id": "xiaomi-mimo-v2.5-pro-free",
+      "model_name": "Xiaomi MiMo V2.5 Pro (free)",
+      "types": "llm",
+      "features": "web",
+      "tool_call": null,
+      "context_length": 1048576
+    },
+    {
+      "model_id": "gpt-image-2-free",
+      "model_name": "GPT Image 2 (free)",
+      "types": "image",
+      "tool_call": false
+    },
+    {
+      "model_id": "hy3-free",
+      "model_name": "HY3 (free)"
+    },
+    {
+      "id": "gpt-4o",
+      "object": "model",
+      "owned_by": "openai"
+    }
+  ]
+}

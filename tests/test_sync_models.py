@@ -53,6 +53,24 @@ class FreeCatalogTests(unittest.TestCase):
             self.assertTrue(any("Union Alpha" in label for label in labels))
             self.assertTrue(settings["modelPicker"]["replaceBuiltInOptions"])
 
+    def test_user_defaults_survive_sync(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            config_dir = Path(tmp)
+            sync_models.write_profile(config_dir, catalog())
+            snapshot = sync_models.apply_user_defaults(config_dir, {"model": "stealth/union-alpha"})
+            self.assertEqual(snapshot["defaults"]["model"], "stealth/union-alpha")
+            again = sync_models.write_profile(config_dir, catalog())
+            self.assertEqual(again["defaults"]["model"], "stealth/union-alpha")
+            settings = json.loads((config_dir / "settings.json").read_text())
+            self.assertEqual(settings["model"], "stealth/union-alpha")
+            self.assertEqual(settings["env"]["ANTHROPIC_DEFAULT_SONNET_MODEL"], again["defaults"]["sonnet"])
+
+    def test_rejects_unknown_user_default(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            sync_models.write_profile(Path(tmp), catalog())
+            with self.assertRaises(ValueError):
+                sync_models.apply_user_defaults(Path(tmp), {"model": "paid/not-free"})
+
 
 if __name__ == "__main__":
     unittest.main()

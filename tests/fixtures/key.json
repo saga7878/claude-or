@@ -1,0 +1,13 @@
+{
+  "data": {
+    "label": "sk-or-v1-au7...890",
+    "is_free_tier": true,
+    "usage": 0,
+    "limit_remaining": null,
+    "free_model_daily_requests": {
+      "limit": 50,
+      "remaining": 38,
+      "used": 12
+    }
+  }
+}

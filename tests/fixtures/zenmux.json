@@ -1,0 +1,37 @@
+{
+  "data": [
+    {
+      "id": "z-ai/glm-4.7-flash-free",
+      "display_name": "Z.AI: GLM 4.7 Flash (Free)",
+      "input_modalities": ["text"],
+      "output_modalities": ["text"],
+      "context_length": 200000,
+      "pricings": {
+        "prompt": [{"value": 0, "unit": "perMTokens", "currency": "USD"}],
+        "completion": [{"value": 0, "unit": "perMTokens", "currency": "USD"}]
+      }
+    },
+    {
+      "id": "sapiens-ai/agnes-2.5-flash",
+      "display_name": "Sapiens AI: Agnes 2.5 Flash",
+      "input_modalities": ["text", "image"],
+      "output_modalities": ["text"],
+      "context_length": 524288,
+      "pricings": {
+        "prompt": [{"value": 0, "unit": "perMTokens", "currency": "USD"}],
+        "completion": [{"value": 0, "unit": "perMTokens", "currency": "USD"}]
+      }
+    },
+    {
+      "id": "anthropic/claude-sonnet-4.6",
+      "display_name": "Anthropic: Claude Sonnet 4.6 Free Preview",
+      "input_modalities": ["text", "image"],
+      "output_modalities": ["text"],
+      "context_length": 200000,
+      "pricings": {
+        "prompt": [{"value": 3, "unit": "perMTokens", "currency": "USD"}],
+        "completion": [{"value": 15, "unit": "perMTokens", "currency": "USD"}]
+      }
+    }
+  ]
+}

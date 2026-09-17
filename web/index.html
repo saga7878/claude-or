@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="color-scheme" content="dark light" />
+    <title>claude-or</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'%3E%3Crect width='16' height='16' rx='3' fill='%2311110f'/%3E%3Cpath d='M3 8h3M10 5.5v5M13 8h-3' stroke='%23f5b942' stroke-width='1.6' stroke-linecap='round'/%3E%3C/svg%3E" />
+    <link rel="stylesheet" href="/app.css" />
+    <script>
+      (function () {
+        var stored = localStorage.getItem("claude-or-theme");
+        var theme = stored === "light" || stored === "dark"
+          ? stored
+          : (matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.style.colorScheme = theme;
+      })();
+    </script>
+  </head>
+  <body>
+    <noscript>需要 JavaScript。</noscript>
+    <main class="shell" id="app">
+      <header class="top">
+        <div>
+          <p class="brand">claude-or</p>
+          <h1 id="tagline">下次启动生效。已经开着的会话不会换网关。</h1>
+        </div>
+        <div class="top-end">
+          <button type="button" class="theme" id="theme">自动</button>
+          <p class="meta" id="meta">127.0.0.1</p>
+        </div>
+      </header>
+
+      <section class="deck">
+        <article class="meter is-quiet" id="lcd" aria-live="polite">
+          <p class="kicker" id="lcd-label">今天还剩</p>
+          <p class="digits" id="lcd-digits" data-readout=""></p>
+          <p class="meter-sub" id="lcd-sub"></p>
+        </article>
+        <div class="gates" id="gates" role="group" aria-label="provider"></div>
+      </section>
+
+      <section class="toolbar">
+        <div class="cluster">
+          <button type="button" class="key" id="sync">刷新目录</button>
+          <label class="toggle" id="probe-wrap">
+            <input type="checkbox" id="probe" checked />
+            <span id="probe-label">探活（不花聊天额度）</span>
+          </label>
+          <button type="button" class="key" id="launch">在终端打开</button>
+        </div>
+        <form class="key-bay" id="key-form">
+          <div class="key-copy">
+            <p class="kicker" id="key-heading">钥匙</p>
+            <p class="hint" id="key-status">还没钥匙</p>
+          </div>
+          <div class="key-row">
+            <input type="password" id="key-input" autocomplete="off" spellcheck="false" />
+            <button type="submit" class="key" id="key-save">存钥匙</button>
+            <a id="signup" href="#" target="_blank" rel="noreferrer">去开一把</a>
+          </div>
+        </form>
+      </section>
+
+      <section class="roles" id="roles">
+        <p class="kicker" id="roles-heading">下次默认</p>
+        <div class="role-grid" id="role-grid"></div>
+      </section>
+
+      <section class="catalog">
+        <div class="catalog-head">
+          <p class="kicker" id="patch-heading">/model</p>
+          <input type="search" id="search" />
+        </div>
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th id="th-id">id</th>
+                <th id="th-name">名字</th>
+                <th id="th-ctx">ctx</th>
+                <th id="th-health">状态</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody id="models"></tbody>
+          </table>
+        </div>
+        <p class="empty" id="empty" hidden></p>
+      </section>
+    </main>
+    <p class="toast" id="toast" role="status" aria-hidden="true"></p>
+    <script src="/app.js"></script>
+  </body>
+</html>
