@@ -1,0 +1,280 @@
+#!/usr/bin/env bash
+# Launch Claude Code against OpenRouter free models without touching the
+# Anthropic-subscription `claude` profile.
+set -euo pipefail
+
+SOURCE="${BASH_SOURCE[0]}"
+while [[ -L "$SOURCE" ]]; do
+  DIR="$(cd -P "$(dirname "$SOURCE")" && pwd)"
+  SOURCE="$(readlink "$SOURCE")"
+  [[ "$SOURCE" != /* ]] && SOURCE="$DIR/$SOURCE"
+done
+ROOT="$(cd -P "$(dirname "$SOURCE")/.." && pwd)"
+VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION" 2>/dev/null || echo 0.0.0)"
+
+CONFIG_DIR="${CLAUDE_OR_HOME:-${CLAUDE_OPENROUTER_HOME:-$HOME/.claude-openrouter}}"
+KEYCHAIN_SERVICE="${CLAUDE_OR_KEYCHAIN_SERVICE:-${CLAUDE_OPENROUTER_KEYCHAIN_SERVICE:-openrouter}}"
+KEYCHAIN_ACCOUNT="${CLAUDE_OR_KEYCHAIN_ACCOUNT:-${CLAUDE_OPENROUTER_KEYCHAIN_ACCOUNT:-api-key}}"
+KEY_FILE="${CLAUDE_OR_KEY_FILE:-${XDG_CONFIG_HOME:-$HOME/.config}/claude-or/api-key}"
+SYNC_SCRIPT="$ROOT/lib/sync_models.py"
+
+usage() {
+  cat <<EOF
+claude-or $VERSION — Claude Code + OpenRouter free models
+
+Usage:
+  claude-or              Start Claude Code with the OpenRouter free-model profile
+  claude-or sync         Refresh /model from OpenRouter's live free catalog
+  claude-or key          Store an OpenRouter API key (Keychain on macOS)
+  claude-or key -        Read the key from stdin (does not echo)
+  claude-or status       Show profile, key presence, and current defaults
+  claude-or doctor       Check claude, python, key, and OpenRouter reachability
+  claude-or update       git pull this install, then sync
+  claude-or --version    Print version
+  claude-or --help       This help
+
+Your regular \`claude\` command is unchanged (Anthropic login / subscription).
+This wrapper sets CLAUDE_CONFIG_DIR=$CONFIG_DIR so the two do not mix.
+
+First-time setup:
+  1. Create a key at https://openrouter.ai/settings/keys
+  2. Run:  claude-or key
+  3. Run:  claude-or
+
+Inside the session, /model lists every usable free chat model, including
+anonymous stealth models that are \$0 without a :free suffix.
+EOF
+}
+
+die() {
+  printf 'claude-or: %s\n' "$*" >&2
+  exit 1
+}
+
+on_macos() {
+  [[ "$(uname -s)" == Darwin ]] && command -v security >/dev/null 2>&1
+}
+
+read_keychain() {
+  security find-generic-password -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w 2>/dev/null || true
+}
+
+read_keyfile() {
+  if [[ -f "$KEY_FILE" ]]; then
+    tr -d '\r\n' < "$KEY_FILE"
+  fi
+}
+
+store_keychain() {
+  local key="$1"
+  security add-generic-password -U -s "$KEYCHAIN_SERVICE" -a "$KEYCHAIN_ACCOUNT" -w "$key" >/dev/null
+  printf 'Stored OpenRouter key in Keychain (%s / %s)\n' "$KEYCHAIN_SERVICE" "$KEYCHAIN_ACCOUNT"
+}
+
+store_keyfile() {
+  local key="$1"
+  mkdir -p "$(dirname "$KEY_FILE")"
+  umask 077
+  printf '%s\n' "$key" > "$KEY_FILE"
+  chmod 600 "$KEY_FILE"
+  printf 'Stored OpenRouter key in %s (mode 600)\n' "$KEY_FILE"
+}
+
+normalize_key() {
+  local key="$1"
+  key="${key//$'\r'/}"
+  key="${key#"${key%%[![:space:]]*}"}"
+  key="${key%"${key##*[![:space:]]}"}"
+  printf '%s' "$key"
+}
+
+store_key() {
+  local key
+  key="$(normalize_key "$1")"
+  [[ -n "$key" ]] || die "API key is empty"
+  [[ "$key" == sk-or-* ]] || die "OpenRouter keys start with sk-or-"
+  if on_macos; then
+    store_keychain "$key"
+  else
+    store_keyfile "$key"
+  fi
+}
+
+resolve_key() {
+  local key="${OPENROUTER_API_KEY:-}"
+  if [[ -z "$key" ]] && on_macos; then
+    key="$(read_keychain)"
+  fi
+  if [[ -z "$key" ]]; then
+    key="$(read_keyfile)"
+  fi
+  if [[ -z "$key" ]]; then
+    cat >&2 <<'EOF'
+claude-or: no OpenRouter API key found.
+
+Create one at https://openrouter.ai/settings/keys (no credit card for free models),
+then store it:
+
+  claude-or key
+
+Or export OPENROUTER_API_KEY for this shell only.
+EOF
+    exit 1
+  fi
+  printf '%s' "$key"
+}
+
+cmd_key() {
+  local key=""
+  if [[ "${1:-}" == "-" ]]; then
+    IFS= read -r key
+  elif [[ -n "${1:-}" ]]; then
+    die "Do not pass the key as an argument (it lands in shell history). Use: claude-or key"
+  else
+    printf 'Paste OpenRouter API key (input hidden): '
+    IFS= read -rs key
+    printf '\n'
+  fi
+  store_key "$key"
+}
+
+cmd_sync() {
+  [[ -f "$SYNC_SCRIPT" ]] || die "missing $SYNC_SCRIPT"
+  command -v python3 >/dev/null 2>&1 || die "python3 is required"
+  CLAUDE_OR_HOME="$CONFIG_DIR" python3 "$SYNC_SCRIPT" --config-dir "$CONFIG_DIR"
+}
+
+ensure_profile() {
+  if [[ ! -f "$CONFIG_DIR/settings.json" ]]; then
+    printf 'claude-or: no profile yet, syncing OpenRouter free catalog…\n' >&2
+    cmd_sync
+  fi
+}
+
+cmd_status() {
+  local key_state="missing"
+  if [[ -n "${OPENROUTER_API_KEY:-}" ]]; then
+    key_state="env OPENROUTER_API_KEY"
+  elif on_macos && [[ -n "$(read_keychain)" ]]; then
+    key_state="keychain ${KEYCHAIN_SERVICE}/${KEYCHAIN_ACCOUNT}"
+  elif [[ -n "$(read_keyfile)" ]]; then
+    key_state="file $KEY_FILE"
+  fi
+  printf 'version:    %s\n' "$VERSION"
+  printf 'install:    %s\n' "$ROOT"
+  printf 'config dir: %s\n' "$CONFIG_DIR"
+  printf 'settings:   %s\n' "$CONFIG_DIR/settings.json"
+  printf 'key:        %s\n' "$key_state"
+  if [[ -f "$CONFIG_DIR/settings.json" ]]; then
+    python3 - "$CONFIG_DIR/settings.json" <<'PY'
+import json, sys
+settings = json.load(open(sys.argv[1]))
+env = settings.get("env") or {}
+print("default:    ", settings.get("model"))
+print("fallback:   ", settings.get("fallbackModel"))
+print("picker:     ", len((settings.get("modelPicker") or {}).get("options") or []), "models")
+print("fable:      ", env.get("ANTHROPIC_DEFAULT_FABLE_MODEL"))
+print("opus:       ", env.get("ANTHROPIC_DEFAULT_OPUS_MODEL"))
+print("sonnet:     ", env.get("ANTHROPIC_DEFAULT_SONNET_MODEL"))
+print("haiku:      ", env.get("ANTHROPIC_DEFAULT_HAIKU_MODEL"))
+PY
+  else
+    printf 'settings.json missing — run: claude-or sync\n'
+  fi
+}
+
+cmd_doctor() {
+  local ok=0
+  check() {
+    local name="$1" status="$2" detail="$3"
+    if [[ "$status" == ok ]]; then
+      printf 'ok   %s %s\n' "$name" "$detail"
+    else
+      printf 'fail %s %s\n' "$name" "$detail"
+      ok=1
+    fi
+  }
+  if command -v python3 >/dev/null 2>&1; then
+    check python3 ok "$(python3 --version 2>&1)"
+  else
+    check python3 fail "not on PATH"
+  fi
+  if command -v claude >/dev/null 2>&1; then
+    check claude ok "$(command -v claude)"
+  else
+    check claude fail "not on PATH — install Claude Code first"
+  fi
+  if [[ -f "$SYNC_SCRIPT" ]]; then
+    check sync-script ok "$SYNC_SCRIPT"
+  else
+    check sync-script fail "missing $SYNC_SCRIPT"
+  fi
+  if [[ -n "${OPENROUTER_API_KEY:-}" ]] || { on_macos && [[ -n "$(read_keychain)" ]]; } || [[ -n "$(read_keyfile)" ]]; then
+    check api-key ok "present"
+  else
+    check api-key fail "run: claude-or key"
+  fi
+  if python3 - "$SYNC_SCRIPT" <<'PY'
+import json, sys, urllib.request
+req = urllib.request.Request(
+    "https://openrouter.ai/api/v1/models",
+    headers={"User-Agent": "claude-or/doctor", "Accept": "application/json"},
+)
+try:
+    with urllib.request.urlopen(req, timeout=20) as response:
+        data = json.load(response)
+    models = data.get("data") if isinstance(data, dict) else data
+    print(len(models) if isinstance(models, list) else 0)
+    sys.exit(0)
+except Exception as exc:
+    print(exc, file=sys.stderr)
+    sys.exit(1)
+PY
+  then
+    check openrouter ok "catalog reachable"
+  else
+    check openrouter fail "cannot fetch https://openrouter.ai/api/v1/models (proxy?)"
+  fi
+  return "$ok"
+}
+
+cmd_update() {
+  [[ -d "$ROOT/.git" ]] || die "this install is not a git clone; re-run install.sh from a clone"
+  git -C "$ROOT" pull --ff-only
+  cmd_sync
+}
+
+cmd_launch() {
+  local key claude_bin
+  key="$(resolve_key)"
+  ensure_profile
+  [[ -f "$CONFIG_DIR/settings.json" ]] || die "missing settings.json — run: claude-or sync"
+
+  claude_bin="$(command -v claude)" || die "claude is not on PATH"
+  mkdir -p "$CONFIG_DIR"
+
+  export CLAUDE_CONFIG_DIR="$CONFIG_DIR"
+  export OPENROUTER_API_KEY="$key"
+  export ANTHROPIC_BASE_URL="https://openrouter.ai/api"
+  export ANTHROPIC_AUTH_TOKEN="$key"
+  export ANTHROPIC_API_KEY=""
+  export CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY="${CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY:-1}"
+  unset CLAUDE_CODE_OAUTH_TOKEN
+
+  exec "$claude_bin" "$@"
+}
+
+main() {
+  case "${1:-}" in
+    -h|--help|help) usage ;;
+    -v|--version|version) printf '%s\n' "$VERSION" ;;
+    key) shift; cmd_key "${1:-}" ;;
+    sync) cmd_sync ;;
+    status) cmd_status ;;
+    doctor) cmd_doctor ;;
+    update) cmd_update ;;
+    *) cmd_launch "$@" ;;
+  esac
+}
+
+main "$@"
