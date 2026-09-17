@@ -68,6 +68,8 @@ PIN_FIRST = [
     "thinkingmachines/inkling:free",
     "thinkingmachines/inkling-small:free",
 ]
+FREE_ROUTER = "openrouter/free"
+FALLBACK_CHAIN_LIMIT = 3
 
 
 def package_version() -> str:
@@ -253,6 +255,42 @@ def pick_healthy(prefs: list[str], usable: list[dict[str, Any]], fallback: str) 
         if available:
             return pick(prefs, available, next((item["id"] for item in usable if item["id"] in available), fallback))
     return fallback
+
+
+def pick_fallback_chain(
+    usable: list[dict[str, Any]],
+    primary: str,
+    *,
+    limit: int = FALLBACK_CHAIN_LIMIT,
+) -> list[str]:
+    """Claude Code `fallbackModel` is an ordered array of at most three IDs, never the primary."""
+    ids: list[str] = []
+    seen: set[str] = set()
+    for item in usable:
+        model_id = str(item.get("id") or "")
+        if not model_id or model_id == primary or model_id in seen:
+            continue
+        seen.add(model_id)
+        ids.append(model_id)
+    router = next((item for item in usable if item.get("id") == FREE_ROUTER), None)
+    if (
+        router
+        and router["id"] != primary
+        and router.get("health") != "down"
+        and FREE_ROUTER in ids
+    ):
+        ids.remove(FREE_ROUTER)
+        ids.insert(0, FREE_ROUTER)
+    return ids[:limit]
+
+
+def set_fallback_model(settings: dict[str, Any], usable: list[dict[str, Any]], primary: str) -> list[str]:
+    chain = pick_fallback_chain(usable, primary)
+    if chain:
+        settings["fallbackModel"] = chain
+    else:
+        settings.pop("fallbackModel", None)
+    return chain
 
 
 def endpoints_url(model_id: str) -> str:
@@ -511,6 +549,7 @@ def apply_user_defaults(config_dir: Path, chosen: dict[str, str]) -> dict[str, A
     settings_path = config_dir / "settings.json"
     settings = load_settings(settings_path)
     apply_defaults_to_settings(settings, defaults)
+    set_fallback_model(settings, snapshot.get("usable") or [], defaults["model"])
     settings_path.write_text(json.dumps(settings, indent=2, ensure_ascii=False) + "\n")
     snapshot_path = config_dir / "free-models.json"
     snapshot_path.write_text(json.dumps(snapshot, indent=2, ensure_ascii=False) + "\n")
@@ -579,8 +618,7 @@ def write_profile(
     apply_defaults_to_settings(settings, defaults)
     if ui_lang() == "zh" and "language" not in settings:
         settings["language"] = "chinese"
-    fallback = next((item for item in ("openrouter/free",) if item in ids), defaults["model"])
-    settings["fallbackModel"] = fallback
+    set_fallback_model(settings, usable, defaults["model"])
     settings["enforceAvailableModels"] = True
     settings["availableModels"] = ids
     settings["modelPicker"] = {
@@ -644,7 +682,11 @@ def print_status(
         settings = json.loads(settings_path.read_text())
         env = settings.get("env") or {}
         print("default:    ", settings.get("model"))
-        print("fallback:   ", settings.get("fallbackModel"))
+        fallback = settings.get("fallbackModel")
+        if isinstance(fallback, list):
+            print("fallback:   ", ", ".join(str(item) for item in fallback) if fallback else "(none)")
+        else:
+            print("fallback:   ", fallback)
         print("picker:     ", len((settings.get("modelPicker") or {}).get("options") or []), "models")
         print("fable:      ", env.get("ANTHROPIC_DEFAULT_FABLE_MODEL"))
         print("opus:       ", env.get("ANTHROPIC_DEFAULT_OPUS_MODEL"))

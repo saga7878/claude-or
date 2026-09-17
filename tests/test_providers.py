@@ -60,6 +60,9 @@ class AihubmixCatalogTests(unittest.TestCase):
             self.assertEqual(settings["env"]["ANTHROPIC_BASE_URL"], "https://aihubmix.com")
             self.assertEqual(snapshot["defaults"]["sonnet"], "coding-glm-5.3-free")
             self.assertEqual(snapshot["provider"], "aihubmix")
+            self.assertIsInstance(settings["fallbackModel"], list)
+            self.assertLessEqual(len(settings["fallbackModel"]), 3)
+            self.assertNotIn(settings["model"], settings["fallbackModel"])
 
 
 class ZenmuxCatalogTests(unittest.TestCase):
@@ -81,6 +84,8 @@ class ZenmuxCatalogTests(unittest.TestCase):
             settings = json.loads((Path(tmp) / "settings.json").read_text())
             self.assertEqual(settings["env"]["ANTHROPIC_BASE_URL"], "https://zenmux.ai/api/anthropic")
             self.assertEqual(snapshot["defaults"]["sonnet"], "z-ai/glm-4.7-flash-free")
+            self.assertIsInstance(settings["fallbackModel"], list)
+            self.assertNotIn(settings["model"], settings["fallbackModel"])
 
 
 if __name__ == "__main__":
